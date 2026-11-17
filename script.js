@@ -275,7 +275,7 @@ function playTone(r) {
     sfx.playbackRate = r.tone || 1;         // 一个音频文件变调出五个音
     if (webAudioMode && audioCtx && !sfxGain) {
       sfxGain = audioCtx.createGain();
-      sfxGain.gain.value = 0.55;            // 音效音量（iOS 上 volume 无效，必须走 GainNode）
+      sfxGain.gain.value = 0.3;             // 选中音效音量（0~1，iOS 上 volume 无效，必须走 GainNode）
       audioCtx.createMediaElementSource(sfx).connect(sfxGain);
       sfxGain.connect(audioCtx.destination);
     }
