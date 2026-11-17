@@ -16,43 +16,43 @@ const SCENE = {
   rulers: [
     {
       id: "feizi", name: "秦非子", tag: "始封之君", era: "约公元前 890 年",
-      scale: 0.66, crown: "flat",
+      scale: 0.82, crown: "flat",
       prop: "whip",
       tone: 1.335,                        // 选中钟声变调 → D4（羽调式·商音位）
       deed: "我做的是……替周王室养马。马养得又多又壮，孝王便把我封在了「秦」地。那时的秦，还只是西陲一个不起眼的附庸——但「秦」这个名字，是从我这里开始的。",
-      img: ""   // 待切图，例如 "assets/rulers/feizi.png"
+      img: "assets/rulers/feizi.png"      // 切图经 tools/process-rulers.js 规格化
     },
     {
       id: "xianggong", name: "秦襄公", tag: "立国之君", era: "公元前 771 年",
-      scale: 0.76, crown: "tall",
+      scale: 0.87, crown: "tall",
       prop: "banner",
       tone: 1.189,                        // → C4
       deed: "我做的是……犬戎攻破镐京、天子蒙难的时候，没有作壁上观。我率兵护送周平王东迁，天子封我为诸侯、赐岐西之地。从那一天起，秦才真正成为「秦国」。",
-      img: ""
+      img: "assets/rulers/xianggong.png"
     },
     {
       id: "mugong", name: "秦穆公", tag: "称霸之君", era: "公元前 659 年",
-      scale: 0.9, crown: "grand",
+      scale: 1.0, crown: "grand", center: true,   // 视觉中心：默认最大 + 预亮光晕
       prop: "sword",
       tone: 1.0,                          // → A3（基音）
       deed: "我做的是……不拘一格用贤才，五张羊皮换来百里奚。向东制衡强晋，向西讨伐戎狄——益国十二，开地千里。秦，第一次有了霸主的样子。",
-      img: ""
+      img: "assets/rulers/mugong.png"
     },
     {
       id: "kanggong", name: "秦康公", tag: "守成之君", era: "公元前 621 年",
-      scale: 0.84, crown: "grand",
+      scale: 0.92, crown: "grand",
       prop: "ge",
       tone: 0.891,                        // → G3
       deed: "我做的是……接下先君留下的霸业，与强晋连年争锋、寸土不让。守业这件事，从来不比创业轻松。",
-      img: ""
+      img: "assets/rulers/kanggong.png"
     },
     {
       id: "gonggong", name: "秦共公", tag: "继志之君", era: "公元前 608 年",
-      scale: 0.8, crown: "grand",
+      scale: 0.88, crown: "grand",
       prop: "scroll",
       tone: 0.794,                        // → F3
       deed: "我做的是……在诸侯环伺的岁月里稳住阵脚，守住穆公以来打下的基业，把这一手牌，完好地交到后来人的手上。",
-      img: ""
+      img: "assets/rulers/gonggong.png"
     }
   ],
   ending: {
@@ -119,12 +119,24 @@ const deedText = $("#deedText"), deedEyebrow = $("#deedEyebrow");
 const heard = new Set();
 let voiceOn = false;
 
+/* ═══════════ 独立 SVG 装饰层（不烘焙进切图）═══════════
+   可选机制：君主 JSON 加 deco: "banner" 即挂载对应装饰，
+   当前未启用（立绘已自带冠饰与旗以外的细节）。 */
+const DECOS = {
+  banner: `<svg class="deco deco-banner" viewBox="0 0 44 190" aria-hidden="true">
+    <line x1="8" y1="186" x2="8" y2="6" stroke="var(--gold)" stroke-width="3" opacity=".85"/>
+    <circle cx="8" cy="5" r="3" fill="var(--gold)" opacity=".9"/>
+    <path d="M10 12 q30 11 30 3 l-4 40 q-16 9 -26 1 z" fill="var(--red)" opacity=".85"
+          stroke="rgba(212,162,78,.4)" stroke-width="1.5"/>
+  </svg>`,
+};
+
 function renderRulers() {
   rulersBox.innerHTML = "";
   dotsBox.innerHTML = "";
   SCENE.rulers.forEach((r, i) => {
     const card = document.createElement("div");
-    card.className = "ruler-card";
+    card.className = "ruler-card" + (r.center ? " center" : "");
     card.dataset.id = r.id;
     card.innerHTML = `
       <div class="portrait-wrap">
@@ -132,6 +144,7 @@ function renderRulers() {
         ${r.img
           ? `<img class="portrait" src="${r.img}" alt="${r.name}" style="height:calc(clamp(180px,36vh,300px) * ${r.scale});" />`
           : silhouetteSVG(r)}
+        ${DECOS[r.deco] || ""}
       </div>
       <div class="pedestal"></div>
       <div class="nameplate">
@@ -139,6 +152,10 @@ function renderRulers() {
         <span class="r-name">${r.name}</span>
         <span class="r-era">${r.era}</span>
       </div>`;
+    if (r.img) {   // 切图加载失败（离线等）→ 自动回退到剪影占位
+      const im = card.querySelector("img.portrait");
+      im.addEventListener("error", () => { im.outerHTML = silhouetteSVG(r); }, { once: true });
+    }
     card.addEventListener("pointerenter", (e) => { if (e.pointerType !== "touch") activate(card, r); });
     card.addEventListener("click", () => activate(card, r));   // 触屏点按
     rulersBox.appendChild(card);
@@ -275,7 +292,7 @@ function playTone(r) {
     sfx.playbackRate = r.tone || 1;         // 一个音频文件变调出五个音
     if (webAudioMode && audioCtx && !sfxGain) {
       sfxGain = audioCtx.createGain();
-      sfxGain.gain.value = 0.3;             // 选中音效音量（0~1，iOS 上 volume 无效，必须走 GainNode）
+      sfxGain.gain.value = 0.15;             // 选中音效音量（0~1，iOS 上 volume 无效，必须走 GainNode）
       audioCtx.createMediaElementSource(sfx).connect(sfxGain);
       sfxGain.connect(audioCtx.destination);
     }

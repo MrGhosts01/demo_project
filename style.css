@@ -133,13 +133,15 @@ body {
 .main-stage.on .ruler-card:nth-child(4) { animation-delay: 1.05s }
 .main-stage.on .ruler-card:nth-child(5) { animation-delay: 1.35s }
 
-.rulers.has-active .ruler-card { opacity: .3; filter: grayscale(0.9) brightness(0.7); }
+.rulers.has-active .ruler-card { opacity: .3; filter: grayscale(0.85) brightness(0.65); }
 .rulers.has-active .ruler-card.active {
   opacity: 1; filter: none;
-  transform: translateY(-16px) scale(1.13);
+  transform: translateY(-16px) scale(1.17);   /* 悬浮放大（规格 1.15~1.2） */
   z-index: 5;
 }
 .ruler-card.active .portrait-wrap .halo { opacity: 1; }
+.ruler-card.center .portrait-wrap .halo { opacity: .5; }   /* 穆公：默认预亮光晕 */
+.rulers.has-active .ruler-card.center .portrait-wrap .halo { opacity: 0; }
 .ruler-card.active .nameplate .r-name { color: var(--gold-2); }
 .ruler-card.active .nameplate .r-tag { border-color: rgba(212,162,78,0.55); color: var(--gold-2); }
 .ruler-card.active .pedestal { opacity: 1; }
@@ -154,12 +156,37 @@ body {
 .portrait {
   display: block;
   height: clamp(180px, 36vh, 300px); width: auto;
-  filter: drop-shadow(0 10px 24px rgba(0,0,0,0.65));
+  /* 默认：人物略暗 + 金色细描边（drop-shadow 双层模拟描边 + 底部投影） */
+  filter: brightness(.74) saturate(.92)
+          drop-shadow(0 0 1px rgba(233,196,120,.5))
+          drop-shadow(0 0 12px rgba(212,162,78,.22))
+          drop-shadow(0 10px 24px rgba(0,0,0,.6));
+  transition: filter .4s ease;
+}
+.ruler-card.active .portrait {
+  /* 高亮：恢复清晰 + 更强的金色辉光 */
+  filter: brightness(1) saturate(1.05)
+          drop-shadow(0 0 1px rgba(240,206,132,.85))
+          drop-shadow(0 0 16px rgba(212,162,78,.38))
+          drop-shadow(0 10px 24px rgba(0,0,0,.55));
 }
 .pedestal {
   width: 72%; height: 10px; margin-top: -4px;
   background: radial-gradient(ellipse at center, rgba(212,162,78,0.5), transparent 72%);
   opacity: .35; transition: opacity .4s ease;
+}
+
+/* ── 独立 SVG 装饰（立绘之外的旗/符号层）── */
+.deco { position: absolute; pointer-events: none; }
+.deco-banner {
+  left: -13%; bottom: 2%; height: 62%; width: auto;
+  transform-origin: 50% 100%;
+  animation: banner-sway 4.5s ease-in-out infinite;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,.5));
+}
+@keyframes banner-sway {
+  0%, 100% { transform: rotate(-2.2deg); }
+  50% { transform: rotate(2.6deg); }
 }
 
 .nameplate {
