@@ -6,6 +6,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   btn.addEventListener("click", () => {
     count++;
-    msg.textContent = `你已经点了 ${count} 次 🎉`;
+    msg.textContent = `笨蛋黄嘉琳已经点了 ${count} 次 🎉`;
   });
 });
