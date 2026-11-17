@@ -121,6 +121,7 @@ async function pipeline(raw, W, H, id) {
      - 强像素（alpha>150）→ 所在连通块的人物
      - 软边像素（26<alpha≤150）→ 仅当 3px 邻域内存在该人物的强像素才归属
        （比"列内就近"严格：远处的他人衣缘残丝不再被误吸进来） */
+  const figOf = new Int8Array(N).fill(-1);
   const strongFig = new Int8Array(N).fill(-1);
   for (let p = 0; p < N; p++) {
     if (label[p] === -1) continue;
@@ -175,24 +176,41 @@ async function pipeline(raw, W, H, id) {
     return { lab, list };
   }
 
-  /* 按人物拼装各自像素 → 统一流水线 */
+  /* ═══ 按人物组装 + 碎岛过滤 → 统一流水线 ═══ */
   for (let fig = 0; fig < 5; fig++) {
     const id = IDS[fig];
+    let srcData = data, srcW = W, srcH = H, useFig = fig;
     if (id === "gonggong" && fs.existsSync(REPL)) {
       console.log(`共公使用替换图: ${path.basename(REPL)}`);
       const rd = await sharp(REPL).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-      await pipeline(rd.data, rd.info.width, rd.info.height, id);
-      continue;
+      srcData = rd.data; srcW = rd.info.width; srcH = rd.info.height;
+      useFig = -1;   // 整图即人物，无需 figOf 归属
     }
-    const seg = Buffer.alloc(N * 4);
-    /* 逐像素拷贝（label 归属可能零散，不能整行 copy） */
-    for (let p = 0; p < N; p++) {
-      if (figOf[p] === fig) {
-        seg[p * 4] = data[p * 4]; seg[p * 4 + 1] = data[p * 4 + 1];
-        seg[p * 4 + 2] = data[p * 4 + 2]; seg[p * 4 + 3] = data[p * 4 + 3];
+    /* mask：该人物的全部不透明像素（alpha>26）*/
+    const n = srcW * srcH;
+    const mask = new Uint8Array(n);
+    let cnt = 0;
+    for (let p = 0; p < n; p++) {
+      if (useFig === -1 ? srcData[p * 4 + 3] > 26 : (figOf[p] === useFig && srcData[p * 4 + 3] > 26)) {
+        mask[p] = 1; cnt++;
       }
     }
-    await pipeline(seg, W, H, id);
+    if (!cnt) { console.log(`${id}: 无像素，跳过`); continue; }
+    /* 连通域过滤：与本体断开的小碎岛（切割残渣/发丝线）丢弃 */
+    const { lab, list } = labelMask(mask, srcW, srcH);
+    const main = Math.max(...list);
+    const keep = list.map(s => s >= main * 0.01);
+    const seg = Buffer.alloc(n * 4);
+    let kept = 0;
+    for (let p = 0; p < n; p++) {
+      if (mask[p] && keep[lab[p]]) {
+        seg[p * 4] = srcData[p * 4]; seg[p * 4 + 1] = srcData[p * 4 + 1];
+        seg[p * 4 + 2] = srcData[p * 4 + 2]; seg[p * 4 + 3] = srcData[p * 4 + 3];
+        kept++;
+      }
+    }
+    console.log(`${id}: 像素 ${(cnt / 1000) | 0}K → 保留 ${(kept / 1000) | 0}K（丢弃 ${list.length - keep.filter(Boolean).length} 块碎岛）`);
+    await pipeline(seg, srcW, srcH, id);
   }
   const sizes = fs.readdirSync(OUT).filter(f => f.endsWith(".png"))
     .map(f => `${f} ${(fs.statSync(path.join(OUT, f)).size / 1024).toFixed(0)}KB`);

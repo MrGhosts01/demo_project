@@ -75,14 +75,14 @@ function findCutPath(data, width, height, zone) {
   return smoothed;
 }
 
-async function writeRuler(data, width, height, outputPath) {
+function defringe(data, width, height) {
   const edge = new Uint8Array(width * height);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const pixel = y * width + x;
       if (data[pixel * 4 + 3] < 26) continue;
-      for (let dy = -4; dy <= 4 && !edge[pixel]; dy++) {
-        for (let dx = -4; dx <= 4; dx++) {
+      for (let dy = -3; dy <= 3 && !edge[pixel]; dy++) {
+        for (let dx = -3; dx <= 3; dx++) {
           const nx = x + dx, ny = y + dy;
           if (nx < 0 || nx >= width || ny < 0 || ny >= height ||
               data[(ny * width + nx) * 4 + 3] < 26) {
@@ -98,38 +98,40 @@ async function writeRuler(data, width, height, outputPath) {
     for (let x = 0; x < width; x++) {
       const pixel = y * width + x;
       if (!edge[pixel]) continue;
-      let nearest = -1;
-      let nearestDistance = Infinity;
+      let red = 0, green = 0, blue = 0, weightSum = 0;
       for (let dy = -8; dy <= 8; dy++) {
         for (let dx = -8; dx <= 8; dx++) {
           const nx = x + dx, ny = y + dy;
           if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
           const candidate = ny * width + nx;
-          if (candidate === pixel || edge[candidate] || data[candidate * 4 + 3] < 200) continue;
-          const distance = dx * dx + dy * dy;
-          if (distance < nearestDistance) {
-            nearest = candidate;
-            nearestDistance = distance;
-          }
+          if (edge[candidate] || data[candidate * 4 + 3] < 220) continue;
+          const weight = 1 / Math.max(1, dx * dx + dy * dy);
+          red += data[candidate * 4] * weight;
+          green += data[candidate * 4 + 1] * weight;
+          blue += data[candidate * 4 + 2] * weight;
+          weightSum += weight;
         }
       }
-      if (nearest >= 0) {
-        for (let channel = 0; channel < 3; channel++) {
-          data[pixel * 4 + channel] = data[nearest * 4 + channel];
-        }
+      if (weightSum === 0) continue;
+      for (let channel = 0; channel < 3; channel++) {
+        const inner = [red, green, blue][channel] / weightSum;
+        data[pixel * 4 + channel] = Math.round(data[pixel * 4 + channel] * 0.35 + inner * 0.65);
       }
     }
   }
+}
 
+async function writeRuler(data, width, height, outputPath) {
+  defringe(data, width, height);
   let minX = width, minY = height, maxX = -1, maxY = -1;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const alphaIndex = (y * width + x) * 4 + 3;
       const alpha = data[alphaIndex];
-      if (alpha < 26) {
+      if (alpha < 96) {
         data[alphaIndex] = 0;
-      } else if (alpha < 60) {
-        data[alphaIndex] = Math.round(((alpha - 26) / 34) * alpha);
+      } else if (alpha < 164) {
+        data[alphaIndex] = Math.round(((alpha - 96) / 68) * alpha);
       }
       if (data[alphaIndex] > 60) {
         minX = Math.min(minX, x);
