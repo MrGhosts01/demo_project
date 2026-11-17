@@ -1,0 +1,13 @@
+# 依赖目录
+node_modules/
+
+# 编辑器
+.vscode/*
+!.vscode/settings.json
+
+# 系统文件
+Thumbs.db
+.DS_Store
+
+# 日志
+*.log
