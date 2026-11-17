@@ -32,7 +32,7 @@ const SCENE = {
     },
     {
       id: "mugong", name: "秦穆公", tag: "称霸之君", era: "公元前 659 年",
-      scale: 1.0, crown: "grand", center: true,   // 视觉中心：默认最大 + 预亮光晕
+      scale: 1.0, crown: "grand",
       prop: "sword",
       tone: 1.0,                          // → A3（基音）
       deed: "我做的是……不拘一格用贤才，五张羊皮换来百里奚。向东制衡强晋，向西讨伐戎狄——益国十二，开地千里。秦，第一次有了霸主的样子。",
@@ -136,11 +136,10 @@ function renderRulers() {
   dotsBox.innerHTML = "";
   SCENE.rulers.forEach((r, i) => {
     const card = document.createElement("div");
-    card.className = "ruler-card" + (r.center ? " center" : "");
+    card.className = "ruler-card";
     card.dataset.id = r.id;
     card.innerHTML = `
       <div class="portrait-wrap">
-        <div class="halo"></div>
         ${r.img
           ? `<img class="portrait" src="${r.img}" alt="${r.name}" style="height:calc(clamp(180px,36vh,300px) * ${r.scale});" />`
           : silhouetteSVG(r)}
@@ -204,11 +203,17 @@ function speak(text) {
     console.error("Speech synthesis is not available in this browser.");
     return;
   }
-  window.speechSynthesis.cancel();
+  if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+    window.speechSynthesis.cancel();
+  }
   const u = new SpeechSynthesisUtterance(text.replace(/……/g, "，"));
   u.lang = "zh-CN"; u.rate = 0.92; u.pitch = 0.9;
-  const chineseVoice = window.speechSynthesis.getVoices()
-    .find(v => /^zh([_-]|$)/i.test(v.lang));
+  const voices = window.speechSynthesis.getVoices()
+    .filter(v => /^zh([_-]|$)/i.test(v.lang));
+  const chineseVoice = voices.find(v => /^zh[-_]cn$/i.test(v.lang) && v.localService) ||
+    voices.find(v => /^zh[-_]cn$/i.test(v.lang)) ||
+    voices.find(v => v.localService) ||
+    voices[0];
   if (chineseVoice) u.voice = chineseVoice;
   if (bgmStarted && bgmOn) rampTo(0.08);
   u.onstart = () => {
@@ -275,19 +280,6 @@ function rampTo(target) {
   }, 60);
 }
 
-let ttsUnlocked = false;
-/* iOS 的 Web Speech 有个坑：若从未在真实用户手势里 speak() 过，
-   之后所有朗读请求都会被静默忽略 —— 用零音量空串在首次手势里解锁 */
-function unlockTTS() {
-  if (ttsUnlocked || !("speechSynthesis" in window)) return;
-  ttsUnlocked = true;
-  try {
-    const u = new SpeechSynthesisUtterance(" ");
-    u.volume = 0; u.lang = "zh-CN";
-    speechSynthesis.speak(u);
-  } catch (_) {}
-}
-
 function markStarted() {
   if (bgmStarted) return;
   bgmStarted = true;
@@ -298,7 +290,6 @@ function markStarted() {
 
 function startBGM() {
   const resumePromise = initAudioGraph();
-  unlockTTS();                    // iOS TTS 手势解锁
   if (!bgmOn || bgmStarted || bgmPlayPending) return;
   bgmError = null;
   bgmPlayPending = true;
@@ -370,7 +361,6 @@ function updateVoiceBtn() {
 }
 updateVoiceBtn();
 $("#voiceBtn").addEventListener("click", () => {
-  unlockTTS();                      // 语音开关本身就是手势，顺手完成 iOS TTS 解锁
   voiceOn = !voiceOn;
   voiceError = false;
   updateVoiceBtn();
