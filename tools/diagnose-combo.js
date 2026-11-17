@@ -63,4 +63,23 @@ const COMBO = "C:\\Users\\Administrator\\Desktop\\五张合集切图.png";
     if (inSeg) segs.push(`${s}-${W - 1}`);
     console.log(`列计数>${min} 段: ${segs.join("  ") || "无"}`);
   });
+
+  /* 排除脚下阴影带后的投影：阴影集中在底部，只统计上方 88% 的行 */
+  const yCut = Math.floor(H * 0.88);
+  const cUp = new Array(W).fill(0);
+  for (let x = 0; x < W; x++)
+    for (let y = 0; y < yCut; y++)
+      if (data[(y * W + x) * 4 + 3] > 120) cUp[x]++;
+  console.log(`\n仅统计 y<${yCut}（排除阴影带）:`);
+  [3, 30, 100].forEach(min => {
+    const segs = [];
+    let inSeg = false, s = 0;
+    for (let x = 0; x < W; x++) {
+      const has = cUp[x] > min;
+      if (has && !inSeg) { inSeg = true; s = x; }
+      else if (!has && inSeg) { inSeg = false; if (x - s > 15) segs.push(`${s}-${x - 1} w${x - s}`); }
+    }
+    if (inSeg) segs.push(`${s}-${W - 1}`);
+    console.log(`列计数>${min} 段: ${segs.join("  ") || "无"}`);
+  });
 })();

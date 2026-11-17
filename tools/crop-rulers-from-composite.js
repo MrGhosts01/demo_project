@@ -76,6 +76,51 @@ function findCutPath(data, width, height, zone) {
 }
 
 async function writeRuler(data, width, height, outputPath) {
+  const edge = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const pixel = y * width + x;
+      if (data[pixel * 4 + 3] < 26) continue;
+      for (let dy = -4; dy <= 4 && !edge[pixel]; dy++) {
+        for (let dx = -4; dx <= 4; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || nx >= width || ny < 0 || ny >= height ||
+              data[(ny * width + nx) * 4 + 3] < 26) {
+            edge[pixel] = 1;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const pixel = y * width + x;
+      if (!edge[pixel]) continue;
+      let nearest = -1;
+      let nearestDistance = Infinity;
+      for (let dy = -8; dy <= 8; dy++) {
+        for (let dx = -8; dx <= 8; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+          const candidate = ny * width + nx;
+          if (candidate === pixel || edge[candidate] || data[candidate * 4 + 3] < 200) continue;
+          const distance = dx * dx + dy * dy;
+          if (distance < nearestDistance) {
+            nearest = candidate;
+            nearestDistance = distance;
+          }
+        }
+      }
+      if (nearest >= 0) {
+        for (let channel = 0; channel < 3; channel++) {
+          data[pixel * 4 + channel] = data[nearest * 4 + channel];
+        }
+      }
+    }
+  }
+
   let minX = width, minY = height, maxX = -1, maxY = -1;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {

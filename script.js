@@ -424,5 +424,34 @@ $("#replayBtn").addEventListener("click", () => {
   setTimeout(typeOS, 600);
 });
 
+/* ── 功绩面板高度自适应 ──
+   以「最长独白」为基准预留面板高度：否则选中文字最长的君主时
+   面板被撑高 → 立绘区(flex:1)被压缩 → 人物与独白整体上移，
+   移开又回落。用离屏探针量出五段文案的最大高度，锁定 min-height，
+   之后任何选择都不会再改变布局。 */
+function fitDeedBox() {
+  const box = $(".deed-box"), eyebrow = $(".deed-eyebrow");
+  if (!box) return;
+  const measure = () => {
+    const probe = document.createElement("div");
+    probe.className = "deed-text";
+    probe.style.cssText = "position:absolute;left:-99999px;top:0;visibility:hidden;";
+    document.body.appendChild(probe);
+    probe.style.width = box.clientWidth + "px";       // 与真实面板同宽
+    let maxH = 0;
+    SCENE.rulers.forEach(r => {
+      probe.innerHTML = `<span class="quote">「</span>${r.deed}<span class="quote">」</span>`;
+      maxH = Math.max(maxH, probe.offsetHeight);
+    });
+    probe.remove();
+    const extra = (eyebrow ? eyebrow.offsetHeight : 0) + 18;   // gap + 余量
+    box.style.minHeight = Math.ceil(Math.max(118, maxH + extra)) + "px";
+  };
+  measure();
+  window.addEventListener("resize", measure);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(measure);  // 字体分包加载完再校准
+}
+
 renderRulers();
+fitDeedBox();
 typeOS();
