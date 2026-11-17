@@ -287,6 +287,23 @@ body {
   .rulers.has-active .ruler-card.active { transform: translateY(-8px) scale(1.06); }
   .deed-text { line-height: 1.9; }
   .deed-box { min-height: 132px; }
+
+  .main-stage.mobile-focus .stage-title,
+  .main-stage.mobile-focus .dots { display: none; }
+  .main-stage.mobile-focus .rulers {
+    align-items: center; justify-content: center;
+    overflow: hidden; padding: 64px 14px 8px;
+    touch-action: pan-y;
+  }
+  .main-stage.mobile-focus .ruler-card:not(.active) { display: none; }
+  .main-stage.mobile-focus .rulers.has-active .ruler-card.active { transform: none; }
+  .main-stage.mobile-focus .ruler-card.active .portrait {
+    height: min(40vh, 320px); max-width: 82vw; object-fit: contain;
+  }
+  .main-stage.mobile-focus .deed-zone {
+    gap: 8px; padding: 10px 18px calc(18px + env(safe-area-inset-bottom));
+  }
+  .main-stage.mobile-focus .deed-box { width: 100%; }
 }
 @media (max-width: 480px) {
   .topbar { padding: 10px 12px; }

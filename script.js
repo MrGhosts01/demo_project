@@ -20,7 +20,8 @@ const SCENE = {
       prop: "whip",
       tone: 1.335,                        // 选中钟声变调 → D4（羽调式·商音位）
       deed: "我做的是……替周王室养马。马养得又多又壮，孝王便把我封在了「秦」地。那时的秦，还只是西陲一个不起眼的附庸——但「秦」这个名字，是从我这里开始的。",
-      img: "assets/rulers/feizi.png"      // 切图经 tools/process-rulers.js 规格化
+      img: "assets/rulers/feizi.png",    // 切图经 tools/process-rulers.js 规格化
+      narration: "assets/audio/voice-feizi.wav"
     },
     {
       id: "xianggong", name: "秦襄公", tag: "立国之君", era: "公元前 771 年",
@@ -28,7 +29,8 @@ const SCENE = {
       prop: "banner",
       tone: 1.189,                        // → C4
       deed: "我做的是……犬戎攻破镐京、天子蒙难的时候，没有作壁上观。我率兵护送周平王东迁，天子封我为诸侯、赐岐西之地。从那一天起，秦才真正成为「秦国」。",
-      img: "assets/rulers/xianggong.png"
+      img: "assets/rulers/xianggong.png",
+      narration: "assets/audio/voice-xianggong.wav"
     },
     {
       id: "mugong", name: "秦穆公", tag: "称霸之君", era: "公元前 659 年",
@@ -36,7 +38,8 @@ const SCENE = {
       prop: "sword",
       tone: 1.0,                          // → A3（基音）
       deed: "我做的是……不拘一格用贤才，五张羊皮换来百里奚。向东制衡强晋，向西讨伐戎狄——益国十二，开地千里。秦，第一次有了霸主的样子。",
-      img: "assets/rulers/mugong.png"
+      img: "assets/rulers/mugong.png",
+      narration: "assets/audio/voice-mugong.wav"
     },
     {
       id: "kanggong", name: "秦康公", tag: "守成之君", era: "公元前 621 年",
@@ -44,7 +47,8 @@ const SCENE = {
       prop: "ge",
       tone: 0.891,                        // → G3
       deed: "我做的是……接下先君留下的霸业，与强晋连年争锋、寸土不让。守业这件事，从来不比创业轻松。",
-      img: "assets/rulers/kanggong.png"
+      img: "assets/rulers/kanggong.png",
+      narration: "assets/audio/voice-kanggong.wav"
     },
     {
       id: "gonggong", name: "秦共公", tag: "继志之君", era: "公元前 608 年",
@@ -52,7 +56,8 @@ const SCENE = {
       prop: "scroll",
       tone: 0.794,                        // → F3
       deed: "我做的是……在诸侯环伺的岁月里稳住阵脚，守住穆公以来打下的基业，把这一手牌，完好地交到后来人的手上。",
-      img: "assets/rulers/gonggong.png"
+      img: "assets/rulers/gonggong.png",
+      narration: "assets/audio/voice-gonggong.wav"
     }
   ],
   ending: {
@@ -118,6 +123,7 @@ const rulersBox = $("#rulers"), dotsBox = $("#dots");
 const deedText = $("#deedText"), deedEyebrow = $("#deedEyebrow");
 const heard = new Set();
 let voiceOn = true, voiceError = false;
+let suppressRulerClick = false, suppressRulerClickTimer = null;
 
 /* ═══════════ 独立 SVG 装饰层（不烘焙进切图）═══════════
    可选机制：君主 JSON 加 deco: "banner" 即挂载对应装饰，
@@ -156,7 +162,15 @@ function renderRulers() {
       im.addEventListener("error", () => { im.outerHTML = silhouetteSVG(r); }, { once: true });
     }
     card.addEventListener("pointerenter", (e) => { if (e.pointerType !== "touch") activate(card, r); });
-    card.addEventListener("click", () => activate(card, r));   // 触屏点按
+    card.addEventListener("click", (event) => {
+      if (suppressRulerClick) {
+        event.preventDefault();
+        suppressRulerClick = false;
+        clearTimeout(suppressRulerClickTimer);
+        return;
+      }
+      activate(card, r);
+    });   // 触屏点按
     rulersBox.appendChild(card);
 
     const dot = document.createElement("span");
@@ -170,14 +184,43 @@ rulersBox.addEventListener("pointerleave", (e) => {
   if (e.pointerType === "touch") return;
   rulersBox.classList.remove("has-active");
   rulersBox.querySelectorAll(".ruler-card").forEach(c => c.classList.remove("active"));
+  stage.classList.remove("mobile-focus");
   deedEyebrow.classList.remove("show");
   deedEyebrow.textContent = "我 做 的 是 ——";
   deedText.innerHTML = `<span class="deed-default">${SCENE.hint}</span>`;
 });
 
+let swipeStart = null;
+rulersBox.addEventListener("touchstart", (event) => {
+  if (!rulersBox.classList.contains("has-active") || event.touches.length !== 1) {
+    swipeStart = null;
+    return;
+  }
+  swipeStart = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+}, { passive: true });
+
+rulersBox.addEventListener("touchend", (event) => {
+  if (!swipeStart || event.changedTouches.length !== 1) return;
+  const deltaX = event.changedTouches[0].clientX - swipeStart.x;
+  const deltaY = event.changedTouches[0].clientY - swipeStart.y;
+  swipeStart = null;
+  if (Math.abs(deltaX) < 48 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) return;
+  event.preventDefault();
+
+  const cards = Array.from(rulersBox.querySelectorAll(".ruler-card"));
+  const currentIndex = cards.findIndex(card => card.classList.contains("active"));
+  const nextIndex = Math.max(0, Math.min(cards.length - 1, currentIndex + (deltaX < 0 ? 1 : -1)));
+  suppressRulerClick = true;
+  clearTimeout(suppressRulerClickTimer);
+  suppressRulerClickTimer = setTimeout(() => { suppressRulerClick = false; }, 300);
+  if (nextIndex === currentIndex) return;
+  activate(cards[nextIndex], SCENE.rulers[nextIndex]);
+}, { passive: false });
+
 function activate(card, r) {
   playTone(r);                              // 选中即鸣钟（音高随君主）
   rulersBox.classList.add("has-active");
+  stage.classList.toggle("mobile-focus", window.matchMedia("(max-width: 640px)").matches);
   rulersBox.querySelectorAll(".ruler-card").forEach(c => c.classList.toggle("active", c === card));
   deedEyebrow.classList.add("show");
   deedEyebrow.textContent = `${r.tag} · ${r.name} 说 ————`;
@@ -192,8 +235,13 @@ function activate(card, r) {
     dotsBox.querySelector(`[data-id="${r.id}"]`)?.classList.add("lit");
     if (heard.size === SCENE.rulers.length) setTimeout(showEnding, 1100);
   }
-  if (voiceOn) speak(r.deed);
+  if (voiceOn) playNarration(r);
 }
+window.addEventListener("resize", () => {
+  if (rulersBox.classList.contains("has-active")) {
+    stage.classList.toggle("mobile-focus", window.matchMedia("(max-width: 640px)").matches);
+  }
+});
 
 /* 语音朗读（Web Speech API，零依赖），朗读时自动压低背景音 */
 function speak(text) {
@@ -208,12 +256,8 @@ function speak(text) {
   }
   const u = new SpeechSynthesisUtterance(text.replace(/……/g, "，"));
   u.lang = "zh-CN"; u.rate = 0.92; u.pitch = 0.9;
-  const voices = window.speechSynthesis.getVoices()
-    .filter(v => /^zh([_-]|$)/i.test(v.lang));
-  const chineseVoice = voices.find(v => /^zh[-_]cn$/i.test(v.lang) && v.localService) ||
-    voices.find(v => /^zh[-_]cn$/i.test(v.lang)) ||
-    voices.find(v => v.localService) ||
-    voices[0];
+  const chineseVoice = window.speechSynthesis.getVoices()
+    .find(v => /^zh[-_]cn$/i.test(v.lang) && v.localService);
   if (chineseVoice) u.voice = chineseVoice;
   if (bgmStarted && bgmOn) rampTo(0.08);
   u.onstart = () => {
@@ -230,6 +274,62 @@ function speak(text) {
   };
   window.speechSynthesis.speak(u);
 }
+
+const narrationAudio = new Audio();
+narrationAudio.preload = "auto";
+const useNarrationAudio = /Android/i.test(navigator.userAgent) &&
+  /MicroMessenger/i.test(navigator.userAgent);
+
+function playNarration(r) {
+  if (!useNarrationAudio) {
+    speak(r.deed);
+    return;
+  }
+  if (!r.narration) {
+    voiceError = true;
+    updateVoiceBtn();
+    console.error(`Narration audio is not configured for ${r.id}.`);
+    return;
+  }
+
+  window.speechSynthesis?.cancel();
+  narrationAudio.pause();
+  narrationAudio.src = r.narration;
+  narrationAudio.currentTime = 0;
+  if (bgmStarted && bgmOn) rampTo(0.08);
+
+  try {
+    const playback = narrationAudio.play();
+    if (playback && playback.catch) {
+      playback.then(() => {
+        voiceError = false;
+        updateVoiceBtn();
+      }).catch((error) => {
+        if (error.name === "AbortError") return;
+        if (bgmOn) rampTo(bgmTarget);
+        voiceError = true;
+        updateVoiceBtn();
+        console.error("Narration audio could not be played:", error);
+      });
+    }
+  } catch (error) {
+    if (bgmOn) rampTo(bgmTarget);
+    voiceError = true;
+    updateVoiceBtn();
+    console.error("Narration audio could not be played:", error);
+  }
+}
+narrationAudio.addEventListener("ended", () => { if (bgmOn) rampTo(bgmTarget); });
+narrationAudio.addEventListener("playing", () => {
+  voiceError = false;
+  updateVoiceBtn();
+});
+narrationAudio.addEventListener("error", () => {
+  if (bgmOn) rampTo(bgmTarget);
+  voiceError = true;
+  updateVoiceBtn();
+  console.error("Narration audio failed to load:", narrationAudio.error);
+});
 
 /* ── 背景音：原创合成氛围音（tools/make-ambience.js 生成）────────
    移动端适配要点：
@@ -328,7 +428,7 @@ $("#bgmBtn").addEventListener("click", (e) => {
   e.stopPropagation();
   bgmOn = !bgmOn;
   if (bgmOn) { startBGM(); if (bgmStarted) rampTo(bgmTarget); }
-  else { rampTo(0); window.speechSynthesis?.cancel(); if (voiceOn) $("#voiceBtn").click(); }
+  else rampTo(0);
   updateBgmBtn();
 });
 
@@ -364,7 +464,11 @@ $("#voiceBtn").addEventListener("click", () => {
   voiceOn = !voiceOn;
   voiceError = false;
   updateVoiceBtn();
-  if (!voiceOn) window.speechSynthesis?.cancel();
+  if (!voiceOn) {
+    window.speechSynthesis?.cancel();
+    narrationAudio.pause();
+    if (bgmOn && bgmStarted) rampTo(bgmTarget);
+  }
 });
 
 /* 终幕字幕 */
@@ -402,7 +506,10 @@ function reveal() {
 /* 重看 */
 $("#replayBtn").addEventListener("click", () => {
   window.speechSynthesis?.cancel();
+  narrationAudio.pause();
+  if (bgmOn && bgmStarted) rampTo(bgmTarget);
   stage.classList.remove("on");
+  stage.classList.remove("mobile-focus");
   osStage.classList.remove("gone");
   $("#ending").classList.remove("show");
   rulersBox.classList.remove("has-active");
