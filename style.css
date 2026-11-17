@@ -113,7 +113,9 @@ body {
 .rulers {
   flex: 1; display: flex; align-items: flex-end; justify-content: center;
   gap: clamp(6px, 2.2vw, 30px);
-  padding: 10px 16px 0;
+  /* 底部 20px 余量：悬浮放大 1.17 倍时卡片向下多出约 12~17px，
+     没有它名字区的「在位时间」一行会被 overflow 裁掉 */
+  padding: 10px 16px 20px;
   overflow-x: auto; overflow-y: hidden;
   scrollbar-width: none;
 }
@@ -126,7 +128,12 @@ body {
   transition: transform .45s cubic-bezier(.22,.9,.3,1.2), opacity .35s ease, filter .35s ease;
   transform: translateY(60px); opacity: 0;
 }
-.main-stage.on .ruler-card { animation: rise .9s cubic-bezier(.2,.8,.25,1) forwards; }
+/* 入场期间禁用过渡：防止 stage.on 引发的 transition 与 rise 动画抢 transform/opacity（否则会出现跳变），
+   动画结束后 JS 移除该类，悬浮放大的 transition 即刻恢复 */
+.rulers.entering .ruler-card { transition: none !important; }
+/* 注意：此处必须声明终态（opacity/transform），并用 backwards 而非 forwards ——
+   forwards 的填充会永久锁定 transform，导致选中放大的 transition 在 0.45s 后被弹回 */
+.main-stage.on .ruler-card { opacity: 1; transform: none; animation: rise .9s cubic-bezier(.2,.8,.25,1) backwards; }
 .main-stage.on .ruler-card:nth-child(1) { animation-delay: .15s }
 .main-stage.on .ruler-card:nth-child(2) { animation-delay: .45s }
 .main-stage.on .ruler-card:nth-child(3) { animation-delay: .75s }
@@ -274,7 +281,7 @@ body {
 .ending .close-btn:hover { background: rgba(212,162,78,0.12); }
 
 /* ── 动画 ────────────────────────────────────── */
-@keyframes rise { to { transform: translateY(0); opacity: 1; } }
+@keyframes rise { from { transform: translateY(60px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 @keyframes blink { 50% { opacity: 0; } }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pulse { 0%,100% { opacity: .45 } 50% { opacity: .95 } }

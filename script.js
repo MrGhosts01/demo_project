@@ -117,7 +117,7 @@ const stage = $("#mainStage"), osStage = $("#osStage");
 const rulersBox = $("#rulers"), dotsBox = $("#dots");
 const deedText = $("#deedText"), deedEyebrow = $("#deedEyebrow");
 const heard = new Set();
-let voiceOn = false;
+let voiceOn = true, voiceError = false;
 
 /* ═══════════ 独立 SVG 装饰层（不烘焙进切图）═══════════
    可选机制：君主 JSON 加 deco: "banner" 即挂载对应装饰，
@@ -198,15 +198,32 @@ function activate(card, r) {
 
 /* 语音朗读（Web Speech API，零依赖），朗读时自动压低背景音 */
 function speak(text) {
-  try {
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text.replace(/……/g, "，"));
-    u.lang = "zh-CN"; u.rate = 0.92; u.pitch = 0.9;
-    if (bgmStarted && bgmOn) rampTo(0.08);          // 鸭子音量，突出人声
-    u.onend = () => { if (bgmOn) rampTo(bgmTarget); };
-    u.onerror = () => { if (bgmOn) rampTo(bgmTarget); };
-    speechSynthesis.speak(u);
-  } catch (_) {}
+  if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+    voiceError = true;
+    updateVoiceBtn();
+    console.error("Speech synthesis is not available in this browser.");
+    return;
+  }
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text.replace(/……/g, "，"));
+  u.lang = "zh-CN"; u.rate = 0.92; u.pitch = 0.9;
+  const chineseVoice = window.speechSynthesis.getVoices()
+    .find(v => /^zh([_-]|$)/i.test(v.lang));
+  if (chineseVoice) u.voice = chineseVoice;
+  if (bgmStarted && bgmOn) rampTo(0.08);
+  u.onstart = () => {
+    voiceError = false;
+    updateVoiceBtn();
+  };
+  u.onend = () => { if (bgmOn) rampTo(bgmTarget); };
+  u.onerror = (event) => {
+    if (bgmOn) rampTo(bgmTarget);
+    if (event.error === "canceled" || event.error === "interrupted") return;
+    voiceError = true;
+    updateVoiceBtn();
+    console.error("Speech synthesis failed:", event.error);
+  };
+  window.speechSynthesis.speak(u);
 }
 
 /* ── 背景音：原创合成氛围音（tools/make-ambience.js 生成）────────
@@ -221,24 +238,27 @@ bgm.loop = true; bgm.preload = "auto";
 let bgmOn = true, bgmStarted = false;
 const bgmTarget = SCENE.bgmVolume;
 let audioCtx = null, bgmGain = null, webAudioMode = false;
-let bgmRamp = null;
+let bgmRamp = null, bgmPlayPending = false, bgmError = null;
 
 function initAudioGraph() {
   if (audioCtx) {
-    if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
-    return;
+    return audioCtx.state === "suspended" ? audioCtx.resume() : Promise.resolve();
   }
   const AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) return;
+  if (!AC) return Promise.resolve();
   try {
     audioCtx = new AC();
-    if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
     bgmGain = audioCtx.createGain();
     bgmGain.gain.value = 0;
     audioCtx.createMediaElementSource(bgm).connect(bgmGain);
     bgmGain.connect(audioCtx.destination);
     webAudioMode = true;
-  } catch (_) { webAudioMode = false; }   // 极老浏览器降级为 volume 方案
+    return audioCtx.state === "suspended" ? audioCtx.resume() : Promise.resolve();
+  } catch (error) {
+    webAudioMode = false;
+    console.warn("Web Audio setup failed; falling back to media-element volume.", error);
+    return Promise.resolve();
+  }
 }
 
 function rampTo(target) {
@@ -255,29 +275,69 @@ function rampTo(target) {
   }, 60);
 }
 
-function startBGM() {
-  initAudioGraph();
-  if (bgmStarted || !bgmOn) return;
+let ttsUnlocked = false;
+/* iOS 的 Web Speech 有个坑：若从未在真实用户手势里 speak() 过，
+   之后所有朗读请求都会被静默忽略 —— 用零音量空串在首次手势里解锁 */
+function unlockTTS() {
+  if (ttsUnlocked || !("speechSynthesis" in window)) return;
+  ttsUnlocked = true;
+  try {
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0; u.lang = "zh-CN";
+    speechSynthesis.speak(u);
+  } catch (_) {}
+}
+
+function markStarted() {
+  if (bgmStarted) return;
   bgmStarted = true;
-  const p = bgm.play();
-  if (p && p.catch) p.catch(() => {});    // 个别移动端仍拒绝时静默降级
-  setTimeout(() => rampTo(bgmTarget), 250);
+  bgmError = null;
+  rampTo(bgmOn ? bgmTarget : 0);
   updateBgmBtn();
 }
-/* 三种手势都挂上：iOS 上 touchend 最可靠，桌面端 pointerdown/click 兜底 */
-["touchend", "pointerdown", "click"].forEach(evt =>
-  window.addEventListener(evt, () => startBGM(), { passive: true }));
+
+function startBGM() {
+  const resumePromise = initAudioGraph();
+  unlockTTS();                    // iOS TTS 手势解锁
+  if (!bgmOn || bgmStarted || bgmPlayPending) return;
+  bgmError = null;
+  bgmPlayPending = true;
+  let playPromise;
+  try {
+    playPromise = bgm.play();
+  } catch (error) {
+    bgmPlayPending = false;
+    bgmError = error;
+    updateBgmBtn();
+    console.error("Background music could not be played:", error);
+    return;
+  }
+  Promise.all([Promise.resolve(playPromise), Promise.resolve(resumePromise)])
+    .then(markStarted)
+    .catch((error) => {
+      bgmStarted = false;
+      bgmError = error;
+      updateBgmBtn();
+      console.error("Background music could not be started:", error);
+    })
+    .finally(() => { bgmPlayPending = false; });
+}
+/* 四种手势都挂上：iOS 用 touchend 最可靠，微信 X5 内核偏好 touchstart，
+   桌面端 pointerdown/click 兜底 */
+["touchstart", "touchend", "pointerdown", "click"].forEach(evt =>
+  window.addEventListener(evt, startBGM, { passive: true }));
 
 function updateBgmBtn() {
-  $("#bgmIcon").textContent = bgmOn ? "🎵" : "🔇";
-  $("#bgmText").textContent = bgmOn ? "音乐 开" : "音乐 关";
+  $("#bgmIcon").textContent = bgmError && bgmOn ? "⚠️" : (bgmOn ? "🎵" : "🔇");
+  $("#bgmText").textContent = bgmError && bgmOn ? "音乐 重试" : (bgmOn ? "音乐 开" : "音乐 关");
   $("#bgmBtn").classList.toggle("on", bgmOn);
+  $("#bgmBtn").title = bgmError && bgmOn ? "背景音乐播放失败，点击重试" : "开启/关闭背景音乐";
 }
 $("#bgmBtn").addEventListener("click", (e) => {
   e.stopPropagation();
   bgmOn = !bgmOn;
   if (bgmOn) { startBGM(); if (bgmStarted) rampTo(bgmTarget); }
-  else { rampTo(0); speechSynthesis?.cancel(); if (voiceOn) $("#voiceBtn").click(); }
+  else { rampTo(0); window.speechSynthesis?.cancel(); if (voiceOn) $("#voiceBtn").click(); }
   updateBgmBtn();
 });
 
@@ -286,7 +346,6 @@ const sfx = new Audio(SCENE.sfx);
 sfx.preload = "auto";
 let sfxGain = null;
 function playTone(r) {
-  if (!bgmStarted) return;                  // 首次手势解锁前保持安静（移动端合规）
   try {
     sfx.currentTime = 0;
     sfx.playbackRate = r.tone || 1;         // 一个音频文件变调出五个音
@@ -297,16 +356,25 @@ function playTone(r) {
       sfxGain.connect(audioCtx.destination);
     }
     const p = sfx.play();
-    if (p && p.catch) p.catch(() => {});
-  } catch (_) {}
+    if (p && p.catch) p.catch(error => console.warn("Selection sound could not be played:", error));
+  } catch (error) {
+    console.error("Selection sound could not be played:", error);
+  }
 }
 updateBgmBtn();
-$("#voiceBtn").addEventListener("click", () => {
-  voiceOn = !voiceOn;
+function updateVoiceBtn() {
+  $("#voiceIcon").textContent = voiceError && voiceOn ? "⚠️" : (voiceOn ? "🔊" : "🔇");
+  $("#voiceText").textContent = voiceError && voiceOn ? "语音不可用" : (voiceOn ? "语音 开" : "语音 关");
   $("#voiceBtn").classList.toggle("on", voiceOn);
-  $("#voiceIcon").textContent = voiceOn ? "🔊" : "🔇";
-  $("#voiceText").textContent = voiceOn ? "语音 开" : "语音 关";
-  if (!voiceOn) speechSynthesis?.cancel();
+  $("#voiceBtn").title = voiceError && voiceOn ? "当前浏览器无法播放语音" : "开启/关闭语音朗读";
+}
+updateVoiceBtn();
+$("#voiceBtn").addEventListener("click", () => {
+  unlockTTS();                      // 语音开关本身就是手势，顺手完成 iOS TTS 解锁
+  voiceOn = !voiceOn;
+  voiceError = false;
+  updateVoiceBtn();
+  if (!voiceOn) window.speechSynthesis?.cancel();
 });
 
 /* 终幕字幕 */
@@ -332,12 +400,18 @@ function typeOS() {
 }
 function reveal() {
   osStage.classList.add("gone");
-  setTimeout(() => stage.classList.add("on"), 500);
+  setTimeout(() => {
+    stage.classList.add("on");
+    /* 入场动画期间禁用卡片过渡（末张延迟 1.35s + 0.9s 动画 = 2.25s），
+       防止 transition 与 rise 抢 transform；结束后恢复，悬浮放大才生效 */
+    rulersBox.classList.add("entering");
+    setTimeout(() => rulersBox.classList.remove("entering"), 2500);
+  }, 500);
 }
 
 /* 重看 */
 $("#replayBtn").addEventListener("click", () => {
-  speechSynthesis?.cancel();
+  window.speechSynthesis?.cancel();
   stage.classList.remove("on");
   osStage.classList.remove("gone");
   $("#ending").classList.remove("show");
