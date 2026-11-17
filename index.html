@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>尾声 · 所以这一次，我到底是谁？</title>
+<meta name="theme-color" content="#0c0a09" />
 <!--
   ═══════════════════════════════════════════════════════════════
   「尾声 · 千载回响」课程结尾互动 demo
@@ -12,6 +13,8 @@
     index.html  —— 页面结构（本文件）
     style.css   —— 全部样式与动画
     script.js   —— SCENE JSON 数据 + 渲染与交互逻辑
+  字体：Noto Serif SC（OFL 开源协议）按需分包 woff2，
+        经 npmmirror CDN 加载，保证 PC / Android / iOS 渲染一致。
   设计说明（面试用）：
   · 整页由 SCENE JSON 数据驱动（见 script.js），
     模拟「JSON 剧本引擎的互动节点组件」：
@@ -20,10 +23,17 @@
     script.js 中各君主的 img 字段填上路径即可自动替换，
     布局与交互不受影响。
   · 交互：悬浮（或触屏点按）君主 → 该立绘放大、其余压暗 →
-    底部面板展示其第一人称功绩「我做的是……」，可开启语音朗读。
+    底部面板展示其第一人称功绩「我做的是……」，可开启语音朗读；
+    每位君主选中时鸣一声编钟，音高各不相同（D 羽调五声音阶）。
+  · 音频全部为原创程序合成（tools/ 目录下生成脚本），零版权风险；
+    背景音在首次用户手势后淡入（移动端自动播放合规 + iOS GainNode）。
   · 五位全部听过之后，解锁结尾字幕（进度点会逐个点亮）。
   ═══════════════════════════════════════════════════════════════
 -->
+<link rel="preconnect" href="https://registry.npmmirror.com" />
+<link rel="stylesheet" href="https://registry.npmmirror.com/@fontsource/noto-serif-sc/5.3.1/files/400.css" />
+<link rel="stylesheet" href="https://registry.npmmirror.com/@fontsource/noto-serif-sc/5.3.1/files/600.css" />
+<link rel="stylesheet" href="https://registry.npmmirror.com/@fontsource/noto-serif-sc/5.3.1/files/700.css" />
 <link rel="stylesheet" href="style.css" />
 <script src="script.js" defer></script>
 </head>
@@ -36,8 +46,11 @@
   <header class="topbar">
     <span class="eyebrow"><b>尾声</b> · 千载回响</span>
     <div class="topbar-actions">
+      <button class="icon-btn" id="bgmBtn" title="开启/关闭背景音乐">
+        <span id="bgmIcon">🎵</span><span class="btn-label" id="bgmText">音乐 开</span>
+      </button>
       <button class="icon-btn" id="voiceBtn" title="开启/关闭语音朗读">
-        <span id="voiceIcon">🔇</span><span id="voiceText">语音 关</span>
+        <span id="voiceIcon">🔇</span><span class="btn-label" id="voiceText">语音 关</span>
       </button>
       <button class="icon-btn" id="replayBtn" title="重看本场景">↺ 重看</button>
     </div>
@@ -47,7 +60,7 @@
   <section class="os-stage" id="osStage">
     <span class="os-tag">内 心 O S</span>
     <div class="os-line"><span id="osText"></span><span class="caret"></span></div>
-    <span class="os-hint">请 戴 上 耳 机 · 静 心 观 看</span>
+    <span class="os-hint">请 戴 上 耳 机 · 点 击 任 意 处 开 启 背 景 音</span>
   </section>
 
   <!-- 场景二：五君立绘 + 悬浮互动 -->

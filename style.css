@@ -16,6 +16,7 @@
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; }
+@supports (height: 100dvh) { body { height: 100dvh; } }  /* 移动端地址栏收缩适配 */
 body {
   background: var(--bg);
   color: var(--ink);
@@ -23,6 +24,7 @@ body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
+.ruler-card, .icon-btn, .close-btn { touch-action: manipulation; }  /* 消除移动端双击缩放延迟 */
 
 /* ── 背景氛围：暗角 + 颗粒 ─────────────────────── */
 .atmosphere {
@@ -260,4 +262,10 @@ body {
   .rulers.has-active .ruler-card.active { transform: translateY(-8px) scale(1.06); }
   .deed-text { line-height: 1.9; }
   .deed-box { min-height: 132px; }
+}
+@media (max-width: 480px) {
+  .topbar { padding: 10px 12px; }
+  .topbar .eyebrow { font-size: 11px; letter-spacing: 0.2em; }
+  .icon-btn { padding: 8px 9px; font-size: 14px; }
+  .btn-label { display: none; }   /* 窄屏只留图标，防止顶栏溢出 */
 }

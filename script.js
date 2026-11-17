@@ -7,6 +7,9 @@
    ═══════════════════════════════════════════════════ */
 const SCENE = {
   type: "ruler-reveal",
+  bgm: "assets/audio/ambience.wav",   // 原创合成氛围音（tools/make-ambience.js 生成）
+  bgmVolume: 0.32,
+  sfx: "assets/audio/chime.wav",      // 选中音效：编钟一声（tools/make-chime.js 生成）
   os: "所以这一次，我到底是谁呢……",
   stageTitle: "这一次，你听到的声音，来自「五个人」",
   hint: "把光标放到他们身上，听听每个人做了什么",
@@ -15,6 +18,7 @@ const SCENE = {
       id: "feizi", name: "秦非子", tag: "始封之君", era: "约公元前 890 年",
       scale: 0.66, crown: "flat",
       prop: "whip",
+      tone: 1.335,                        // 选中钟声变调 → D4（羽调式·商音位）
       deed: "我做的是……替周王室养马。马养得又多又壮，孝王便把我封在了「秦」地。那时的秦，还只是西陲一个不起眼的附庸——但「秦」这个名字，是从我这里开始的。",
       img: ""   // 待切图，例如 "assets/rulers/feizi.png"
     },
@@ -22,6 +26,7 @@ const SCENE = {
       id: "xianggong", name: "秦襄公", tag: "立国之君", era: "公元前 771 年",
       scale: 0.76, crown: "tall",
       prop: "banner",
+      tone: 1.189,                        // → C4
       deed: "我做的是……犬戎攻破镐京、天子蒙难的时候，没有作壁上观。我率兵护送周平王东迁，天子封我为诸侯、赐岐西之地。从那一天起，秦才真正成为「秦国」。",
       img: ""
     },
@@ -29,6 +34,7 @@ const SCENE = {
       id: "mugong", name: "秦穆公", tag: "称霸之君", era: "公元前 659 年",
       scale: 0.9, crown: "grand",
       prop: "sword",
+      tone: 1.0,                          // → A3（基音）
       deed: "我做的是……不拘一格用贤才，五张羊皮换来百里奚。向东制衡强晋，向西讨伐戎狄——益国十二，开地千里。秦，第一次有了霸主的样子。",
       img: ""
     },
@@ -36,6 +42,7 @@ const SCENE = {
       id: "kanggong", name: "秦康公", tag: "守成之君", era: "公元前 621 年",
       scale: 0.84, crown: "grand",
       prop: "ge",
+      tone: 0.891,                        // → G3
       deed: "我做的是……接下先君留下的霸业，与强晋连年争锋、寸土不让。守业这件事，从来不比创业轻松。",
       img: ""
     },
@@ -43,6 +50,7 @@ const SCENE = {
       id: "gonggong", name: "秦共公", tag: "继志之君", era: "公元前 608 年",
       scale: 0.8, crown: "grand",
       prop: "scroll",
+      tone: 0.794,                        // → F3
       deed: "我做的是……在诸侯环伺的岁月里稳住阵脚，守住穆公以来打下的基业，把这一手牌，完好地交到后来人的手上。",
       img: ""
     }
@@ -152,6 +160,7 @@ rulersBox.addEventListener("pointerleave", (e) => {
 });
 
 function activate(card, r) {
+  playTone(r);                              // 选中即鸣钟（音高随君主）
   rulersBox.classList.add("has-active");
   rulersBox.querySelectorAll(".ruler-card").forEach(c => c.classList.toggle("active", c === card));
   deedEyebrow.classList.add("show");
@@ -170,15 +179,111 @@ function activate(card, r) {
   if (voiceOn) speak(r.deed);
 }
 
-/* 语音朗读（Web Speech API，零依赖） */
+/* 语音朗读（Web Speech API，零依赖），朗读时自动压低背景音 */
 function speak(text) {
   try {
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text.replace(/……/g, "，"));
     u.lang = "zh-CN"; u.rate = 0.92; u.pitch = 0.9;
+    if (bgmStarted && bgmOn) rampTo(0.08);          // 鸭子音量，突出人声
+    u.onend = () => { if (bgmOn) rampTo(bgmTarget); };
+    u.onerror = () => { if (bgmOn) rampTo(bgmTarget); };
     speechSynthesis.speak(u);
   } catch (_) {}
 }
+
+/* ── 背景音：原创合成氛围音（tools/make-ambience.js 生成）────────
+   移动端适配要点：
+   1. 浏览器规定音频必须在真实用户手势内启动 —— 监听 touchend /
+      pointerdown / click 三种手势，首次触发即解锁并淡入；
+   2. iOS Safari 的 audio.volume 属性无效（恒为 1）—— 因此统一改用
+      AudioContext + GainNode 控制音量，淡入淡出/压低全平台有效；
+   3. AudioContext 被来电/锁屏挂起后，在后续手势里自动 resume。 */
+const bgm = new Audio(SCENE.bgm);
+bgm.loop = true; bgm.preload = "auto";
+let bgmOn = true, bgmStarted = false;
+const bgmTarget = SCENE.bgmVolume;
+let audioCtx = null, bgmGain = null, webAudioMode = false;
+let bgmRamp = null;
+
+function initAudioGraph() {
+  if (audioCtx) {
+    if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+    return;
+  }
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  try {
+    audioCtx = new AC();
+    if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+    bgmGain = audioCtx.createGain();
+    bgmGain.gain.value = 0;
+    audioCtx.createMediaElementSource(bgm).connect(bgmGain);
+    bgmGain.connect(audioCtx.destination);
+    webAudioMode = true;
+  } catch (_) { webAudioMode = false; }   // 极老浏览器降级为 volume 方案
+}
+
+function rampTo(target) {
+  clearInterval(bgmRamp);
+  if (webAudioMode && bgmGain && audioCtx) {
+    bgmGain.gain.cancelScheduledValues(audioCtx.currentTime);
+    bgmGain.gain.setTargetAtTime(target, audioCtx.currentTime, 0.25);
+    return;
+  }
+  bgmRamp = setInterval(() => {           // 降级路径：volume 渐变
+    const d = target - bgm.volume;
+    if (Math.abs(d) <= 0.02) { bgm.volume = target; clearInterval(bgmRamp); return; }
+    bgm.volume = Math.max(0, Math.min(1, bgm.volume + Math.sign(d) * 0.02));
+  }, 60);
+}
+
+function startBGM() {
+  initAudioGraph();
+  if (bgmStarted || !bgmOn) return;
+  bgmStarted = true;
+  const p = bgm.play();
+  if (p && p.catch) p.catch(() => {});    // 个别移动端仍拒绝时静默降级
+  setTimeout(() => rampTo(bgmTarget), 250);
+  updateBgmBtn();
+}
+/* 三种手势都挂上：iOS 上 touchend 最可靠，桌面端 pointerdown/click 兜底 */
+["touchend", "pointerdown", "click"].forEach(evt =>
+  window.addEventListener(evt, () => startBGM(), { passive: true }));
+
+function updateBgmBtn() {
+  $("#bgmIcon").textContent = bgmOn ? "🎵" : "🔇";
+  $("#bgmText").textContent = bgmOn ? "音乐 开" : "音乐 关";
+  $("#bgmBtn").classList.toggle("on", bgmOn);
+}
+$("#bgmBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  bgmOn = !bgmOn;
+  if (bgmOn) { startBGM(); if (bgmStarted) rampTo(bgmTarget); }
+  else { rampTo(0); speechSynthesis?.cancel(); if (voiceOn) $("#voiceBtn").click(); }
+  updateBgmBtn();
+});
+
+/* ── 选中音效：编钟一声，音高随君主变调（D 羽调五声音阶）── */
+const sfx = new Audio(SCENE.sfx);
+sfx.preload = "auto";
+let sfxGain = null;
+function playTone(r) {
+  if (!bgmStarted) return;                  // 首次手势解锁前保持安静（移动端合规）
+  try {
+    sfx.currentTime = 0;
+    sfx.playbackRate = r.tone || 1;         // 一个音频文件变调出五个音
+    if (webAudioMode && audioCtx && !sfxGain) {
+      sfxGain = audioCtx.createGain();
+      sfxGain.gain.value = 0.55;            // 音效音量（iOS 上 volume 无效，必须走 GainNode）
+      audioCtx.createMediaElementSource(sfx).connect(sfxGain);
+      sfxGain.connect(audioCtx.destination);
+    }
+    const p = sfx.play();
+    if (p && p.catch) p.catch(() => {});
+  } catch (_) {}
+}
+updateBgmBtn();
 $("#voiceBtn").addEventListener("click", () => {
   voiceOn = !voiceOn;
   $("#voiceBtn").classList.toggle("on", voiceOn);
